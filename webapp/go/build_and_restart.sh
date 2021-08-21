@@ -1,4 +1,4 @@
 #!/bin/bash
 set -ex
-go build -o sucondition main.go
+go build -o isucondition main.go
 sudo service isucondition.go restart
