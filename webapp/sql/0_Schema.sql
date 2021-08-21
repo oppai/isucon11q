@@ -38,3 +38,4 @@ CREATE TABLE `isu_association_config` (
 
 ALTER TABLE `isu_condition` ADD INDEX index1(jia_isu_uuid,timestamp);
 ALTER TABLE `isu` ADD INDEX index2(jia_user_id,jia_isu_uuid);
+ALTER TABLE `isu` ADD INDEX index3(`character`);
