@@ -334,6 +334,8 @@ func postInitialize(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	dumpIsuIcon()
+
 	_, err = db.Exec(
 		"INSERT INTO `isu_association_config` (`name`, `url`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `url` = VALUES(`url`)",
 		"jia_service_url",
@@ -551,6 +553,7 @@ func postIsu(c echo.Context) error {
 
 	jiaIsuUUID := c.FormValue("jia_isu_uuid")
 	isuName := c.FormValue("isu_name")
+
 	fh, err := c.FormFile("image")
 	if err != nil {
 		if !errors.Is(err, http.ErrMissingFile) {
@@ -589,9 +592,11 @@ func postIsu(c echo.Context) error {
 	}
 	defer tx.Rollback()
 
+	// put image
+	writeIcon(jiaIsuUUID, image)
 	_, err = tx.Exec("INSERT INTO `isu`"+
 		"	(`jia_isu_uuid`, `name`, `image`, `jia_user_id`) VALUES (?, ?, ?, ?)",
-		jiaIsuUUID, isuName, image, jiaUserID)
+		jiaIsuUUID, isuName, make([]byte, 0), jiaUserID)
 	if err != nil {
 		mysqlErr, ok := err.(*mysql.MySQLError)
 
@@ -698,6 +703,34 @@ func getIsuID(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+func writeIcon(jiaIsuUUID string, image []byte) {
+	// user dir
+	os.Mkdir("/home/isucon/webapp/public/api/isu/" + jiaIsuUUID, 0755)
+	// put image
+	ioutil.WriteFile("/home/isucon/webapp/public/api/isu/" + jiaIsuUUID + "/icon", image, os.ModePerm)
+}
+
+func deleteIcon(jiaIsuUUID string) {
+	os.RemoveAll("/home/isucon/webapp/public/api/isu/" + jiaIsuUUID)
+}
+
+func dumpIsuIcon() {
+	rows, err := db.Query("SELECT jia_isu_uuid, image FROM isu")
+	if err != nil {
+	    log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+	    var uuid string
+	    var image []byte
+	    if err := rows.Scan(&uuid, &image); err != nil {
+		log.Fatal(err)
+	    }
+	    writeIcon(uuid, image)
+	}
+}
+
 // GET /api/isu/:jia_isu_uuid/icon
 // ISUのアイコンを取得
 func getIsuIcon(c echo.Context) error {
@@ -713,9 +746,8 @@ func getIsuIcon(c echo.Context) error {
 
 	jiaIsuUUID := c.Param("jia_isu_uuid")
 
-	var image []byte
-	err = db.Get(&image, "SELECT `image` FROM `isu` WHERE `jia_user_id` = ? AND `jia_isu_uuid` = ?",
-		jiaUserID, jiaIsuUUID)
+	var tmpId string
+	err = db.Get(&tmpId, "SELECT `jia_user_id` FROM `isu` WHERE `jia_user_id` = ? AND `jia_isu_uuid` = ?", jiaUserID, jiaIsuUUID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return c.String(http.StatusNotFound, "not found: isu")
@@ -724,6 +756,7 @@ func getIsuIcon(c echo.Context) error {
 		c.Logger().Errorf("db error: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+	image, _ := ioutil.ReadFile("/home/isucon/webapp/public/api/isu/" + jiaIsuUUID + "/icon")
 
 	return c.Blob(http.StatusOK, "", image)
 }
@@ -760,7 +793,7 @@ func getIsuGraph(c echo.Context) error {
 	defer tx.Rollback()
 
 	var count int
-	err = tx.Get(&count, "SELECT COUNT(*) FROM `isu` WHERE `jia_user_id` = ? AND `jia_isu_uuid` = ?",
+	err = tx.Get(&count, "SELECT COUNT(1) FROM `isu` WHERE `jia_user_id` = ? AND `jia_isu_uuid` = ?",
 		jiaUserID, jiaIsuUUID)
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
