@@ -24,6 +24,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	"github.com/newrelic/go-agent/v3/integrations/nrecho-v4"
+	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
 const (
@@ -207,12 +209,23 @@ func init() {
 }
 
 func main() {
+
+	newRelicApp, ee := newrelic.NewApplication(
+		newrelic.ConfigAppName("ISUCON11q"),
+		newrelic.ConfigLicense("f17293c32b8454f95d1ddca0d68e4d987f7eNRAL"),
+		newrelic.ConfigDebugLogger(os.Stdout),
+	)
+	if ee != nil {
+	    panic(ee)
+	}
+
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(nrecho.Middleware(newRelicApp))
 
 	e.POST("/initialize", postInitialize)
 
